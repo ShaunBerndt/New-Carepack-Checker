@@ -385,7 +385,7 @@ if category_choice == "Custom...":
 
 category = custom_category if category_choice == "Custom..." else category_choice
 
-    if lead_times:
+if lead_times:
         ics_bytes = generate_ics_reminders_consolidated_by_day(
             result_df,
             today,

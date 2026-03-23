@@ -405,7 +405,7 @@ if lead_times:
         )
 
         st.caption("Note: Event color depends on your calendar app. Outlook uses categories for colors; create a matching category for consistent red.")
-    else:
+else:
         st.warning("Select at least one lead time.")
 
 

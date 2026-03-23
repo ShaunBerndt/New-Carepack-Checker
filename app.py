@@ -383,7 +383,7 @@ custom_category = ""
 if category_choice == "Custom...":
     custom_category = st.text_input("Custom category name", value="HP Care Packs")
 
-   category = custom_category if category_choice == "Custom..." 
+category = custom_category if category_choice == "Custom..." 
 else category_choice
 
 if lead_times:

@@ -10,12 +10,13 @@ from openpyxl import load_workbook
 TEMPLATE_XLSX = "Carepacks Tool_TEMPLATE_UPDATED.xlsx"
 
 st.set_page_config(page_title="HP Care Pack Checker", layout="wide")
-
 st.title("HP Care Pack Checker")
-st.caption("Upload the exported warranty CSV, view the computed table, download an updated Excel template, and generate consolidated calendar reminders.")
+st.caption(
+    "Upload the exported warranty CSV, view the computed table, download an updated Excel template, "
+    "and generate consolidated calendar reminders."
+)
 
 # ---------------- Helpers ----------------
-
 def _to_date(x):
     """Parse common HP export date formats + Excel serials."""
     if x is None:
@@ -65,14 +66,15 @@ def compute_table(import_df: pd.DataFrame, today: date) -> pd.DataFrame:
     }
     df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
 
-    for col in [
+    required_cols = [
         "Serial number",
         "Product number",
         "Product name",
         "Coverage status",
         "Warranty start date",
         "Warranty end date",
-    ]:
+    ]
+    for col in required_cols:
         if col not in df.columns:
             df[col] = ""
 
@@ -147,18 +149,22 @@ def compute_table(import_df: pd.DataFrame, today: date) -> pd.DataFrame:
     ]
     df = df[out_cols]
 
-    df = df.sort_values(by=["Warranty end date", "Serial number"], ascending=[True, True], na_position="last")
+    df = df.sort_values(
+        by=["Warranty end date", "Serial number"],
+        ascending=[True, True],
+        na_position="last",
+    )
     return df
 
 
 def write_csv_lines_into_template(csv_bytes: bytes) -> bytes:
     """Paste raw CSV lines into the 'imported data csv' sheet column A, preserving formulas & formatting."""
     wb = load_workbook(TEMPLATE_XLSX, data_only=False)
+
     if "imported data csv" not in wb.sheetnames:
         raise ValueError("Template missing required sheet: 'imported data csv'")
 
     ws = wb["imported data csv"]
-
     text = csv_bytes.decode("utf-8-sig", errors="ignore")
     lines = [ln.rstrip("\r") for ln in text.split("\n") if ln.strip()]
 
@@ -216,21 +222,25 @@ def generate_ics_reminders_consolidated_by_day(
             rd = w_end - timedelta(days=int(ld))
             if rd < today:
                 continue
-            reminders.append({
-                "remind_date": rd,
-                "lead_days": int(ld),
-                "serial": str(row.get("Serial number", "")).strip(),
-                "product": str(row.get("Product name", "")).strip(),
-                "prodno": str(row.get("Product number", "")).strip(),
-                "coverage": str(row.get("Coverage status", "")).strip(),
-                "warranty_end": w_end,
-            })
+
+            reminders.append(
+                {
+                    "remind_date": rd,
+                    "lead_days": int(ld),
+                    "serial": str(row.get("Serial number", "")).strip(),
+                    "product": str(row.get("Product name", "")).strip(),
+                    "prodno": str(row.get("Product number", "")).strip(),
+                    "coverage": str(row.get("Coverage status", "")).strip(),
+                    "warranty_end": w_end,
+                }
+            )
 
     if not reminders:
-        return ("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//HP//Care Pack Checker//EN\r\nEND:VCALENDAR\r\n").encode("utf-8")
+        return (
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//HP//Care Pack Checker//EN\r\nEND:VCALENDAR\r\n"
+        ).encode("utf-8")
 
     rem_df = pd.DataFrame(reminders)
-
     tz = ZoneInfo(tz_name)
     now_utc = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
     transp = "TRANSPARENT" if show_as_available else "OPAQUE"
@@ -268,41 +278,49 @@ def generate_ics_reminders_consolidated_by_day(
         shown = g.head(max_items_in_body)
         for _, r in shown.iterrows():
             body.append(
-                f"- [{r['lead_days']}d] {r['product']} | SN: {r['serial']} | PN: {r['prodno']} | Ends: {r['warranty_end'].isoformat()} | {r['coverage']}"
+                f"- [{r['lead_days']}d] {r['product']} "
+                f"SN: {r['serial']} "
+                f"PN: {r['prodno']} "
+                f"Ends: {r['warranty_end'].isoformat()} "
+                f"{r['coverage']}"
             )
+
         if total > max_items_in_body:
             body.append(f"...and {total - max_items_in_body} more item(s).")
 
         description = "\n".join(header + body)
-
         uid = f"consolidated-{remind_date.strftime('%Y%m%d')}@hpcarepackchecker"
 
-        lines.extend([
-            "BEGIN:VEVENT",
-            f"UID:{uid}",
-            f"DTSTAMP:{now_utc}",
-            f"SUMMARY:{_ics_escape(summary)}",
-            f"DESCRIPTION:{_ics_escape(description)}",
-            "STATUS:CONFIRMED",
-            f"TRANSP:{transp}",
-            f"DTSTART:{dtstart_utc}",
-            f"DTEND:{dtend_utc}",
-            f"CATEGORIES:{_ics_escape(category_name)}",
-            "COLOR:#FF0000",
-            "X-APPLE-CALENDAR-COLOR:#FF0000",
-            "END:VEVENT",
-        ])
+        lines.extend(
+            [
+                "BEGIN:VEVENT",
+                f"UID:{uid}",
+                f"DTSTAMP:{now_utc}",
+                f"SUMMARY:{_ics_escape(summary)}",
+                f"DESCRIPTION:{_ics_escape(description)}",
+                "STATUS:CONFIRMED",
+                f"TRANSP:{transp}",
+                f"DTSTART:{dtstart_utc}",
+                f"DTEND:{dtend_utc}",
+                f"CATEGORIES:{_ics_escape(category_name)}",
+                "COLOR:#FF0000",
+                "X-APPLE-CALENDAR-COLOR:#FF0000",
+                "END:VEVENT",
+            ]
+        )
 
     lines.append("END:VCALENDAR")
     return ("\r\n".join(lines) + "\r\n").encode("utf-8")
 
 
 # ---------------- UI ----------------
-
 uploaded = st.file_uploader(
     "Upload your warranty export (CSV)",
     type=["csv", "txt"],
-    help="Upload the CSV export that contains serial number, product name, coverage status, warranty start/end dates, and product number.",
+    help=(
+        "Upload the CSV export that contains serial number, product name, coverage status, "
+        "warranty start/end dates, and product number."
+    ),
 )
 
 colA, colB = st.columns([2, 1])
@@ -332,14 +350,16 @@ if not rows:
 
 # If single-column raw lines, parse again
 if len(rows[0]) == 1 and "," in rows[0][0]:
-    reader2 = csv.reader(io.StringIO("\n".join([r[0] for r in rows])), skipinitialspace=True)
+    reader2 = csv.reader(
+        io.StringIO("\n".join([r[0] for r in rows])),
+        skipinitialspace=True,
+    )
     rows = list(reader2)
 
 header = [h.strip() for h in rows[0]]
 data = rows[1:]
 
 import_df = pd.DataFrame(data, columns=header)
-
 for c in import_df.columns:
     import_df[c] = import_df[c].astype(str).str.strip().str.strip('"')
 
@@ -362,7 +382,10 @@ st.divider()
 
 # Calendar reminders
 st.subheader("Calendar Reminders")
-st.write("Generate consolidated reminders: one 10-minute entry per day (for non-expired items), at 30 and 15 days before warranty end.")
+st.write(
+    "Generate consolidated reminders: one 10-minute entry per day (for non-expired items), "
+    "at 30 and 15 days before warranty end."
+)
 
 create_cal = st.checkbox("Create consolidated calendar reminders (.ics)", value=False)
 
@@ -374,19 +397,21 @@ if create_cal:
     )
 
     reminder_time = st.time_input("Reminder time (SAST)", value=time(9, 0))
-
     show_free = st.checkbox("Show as Available (does not block calendar time)", value=True)
 
-    category_choice = st.selectbox("Category (best-effort color in Outlook)", ["HP Care Packs", "Urgent", "Red", "Custom..."], index=0)
+    category_choice = st.selectbox(
+        "Category (best-effort color in Outlook)",
+        ["HP Care Packs", "Urgent", "Red", "Custom..."],
+        index=0,
+    )
 
-custom_category = ""
-if category_choice == "Custom...":
-    custom_category = st.text_input("Custom category name", value="HP Care Packs")
+    custom_category = ""
+    if category_choice == "Custom...":
+        custom_category = st.text_input("Custom category name", value="HP Care Packs")
 
-category = custom_category if category_choice == "Custom..." 
-else category_choice
+    category = custom_category if category_choice == "Custom..." else category_choice
 
-if lead_times:
+    if lead_times:
         ics_bytes = generate_ics_reminders_consolidated_by_day(
             result_df,
             today,
@@ -405,14 +430,19 @@ if lead_times:
             mime="text/calendar",
         )
 
-        st.caption("Note: Event color depends on your calendar app. Outlook uses categories for colors; create a matching category for consistent red.")
-else:
+        st.caption(
+            "Note: Event color depends on your calendar app. Outlook uses categories for colors; "
+            "create a matching category for consistent red."
+        )
+    else:
         st.warning("Select at least one lead time.")
-
 
 # Excel download
 st.subheader("Download Excel (Template Preserved)")
-st.write("Download an updated Excel workbook. This keeps all formulas & formatting from the template and pastes your CSV into the 'imported data csv' tab as raw CSV lines.")
+st.write(
+    "Download an updated Excel workbook. This keeps all formulas & formatting from the template "
+    "and pastes your CSV into the 'imported data csv' tab as raw CSV lines."
+)
 
 try:
     updated_bytes = write_csv_lines_into_template(raw_bytes)
